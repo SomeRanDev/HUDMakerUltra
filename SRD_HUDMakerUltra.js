@@ -2,8 +2,8 @@
  * @target MZ
  * @plugindesc Allows you to create and use HUDs for the map and battles.
  * Requires the HUD Maker Ultra editor.
- * @author SRDude
- * @url http://sumrndm.site/hud-maker-ultra
+ * @author SomeRanDev
+ * @url http://someran.dev/links
  * @base SRD_UltraBase
  * @orderAfter SRD_UltraBase
  * @orderBefore SRD_HUDMakerUltraPro
@@ -85,15 +85,26 @@
  * @help
  * ============================================================================
  *                                HUD Maker Ultra
- *                                 Version 1.1.5
- *                                    SRDude
+ *                                 Version 1.2.5
+ *                                   SomeRanDev
  * ============================================================================
  *
  * This plugin allows developers to create their own map and battle HUD.
  *
  * This plugin requires the HUD Maker Ultra software.
  * You can download it for free here:
- * http://sumrndm.site/hud-maker-ultra
+ * https://someran.dev/rpgmaker/plugins/mv/SRD_HUDMaker.js/
+ *
+ *
+ * ============================================================================
+ *  Changelog
+ * ============================================================================
+ *
+ * 1.2.5
+ * Increment SRD_UltraBase.js requirement to 1.2.3.
+ *
+ * 1.2.4
+ * Scale and opacity animations can now stack with each other.
  *
  * ============================================================================
  *  End of Help File
@@ -102,18 +113,18 @@
  * Welcome to the bottom of the Help file. Thanks for reading!
  *
  * https://www.youtube.com/SumRndmDde
- * https://www.twitter.com/SumRndmDde
- * http://sumrndm.site
+ * https://bsky.app/profile/someran.dev
+ * http://someran.dev
  *
  * Until next time,
- *   ~ SRDude
+ *   ~ SomeRanDev
  */
 
 var SRD = SRD || {};
 SRD.HUDMakerUltra = SRD.HUDMakerUltra || {};
 
 var Imported = Imported || {};
-Imported.SRD_HUDMakerUltra = 0x010105; // 1.1.5
+Imported.SRD_HUDMakerUltra = 0x010205; // 1.2.5
 
 var $dataUltraHUD = null;
 var $gameUltraHUD = null;
@@ -138,17 +149,8 @@ function CheckDependencies() {
 		return false;
 	}
 
-	if(Imported.SRD_UltraBase < 0x010100) {
-		const msg = "SRD_UltraBase.js requies an update! Please update to the latest version.";
-		console.warn(msg);
-		if(confirm(msg + "\nWould you like to open the download page (right-click -> save)?")) {
-			const url = "https://raw.githubusercontent.com/SumRndmDde/HUDMakerUltra/main/SRD_UltraBase.js";
-			if(Utils.isNwjs()) {
-				require('nw.gui').Shell.openExternal(url);
-			} else if(window && window.open) {
-				window.open(url);
-			}
-		}
+	if(Imported.SRD_UltraBase < 0x010203) {
+		alert("SRD_UltraBase.js requies an update! Please update to the latest version.");
 		return false;
 	}
 
@@ -348,6 +350,7 @@ class Game_UltraHUD {
 class HUDMakerUltraProcessConfiguration extends UltraProcessConfiguration {
 	initialize() {
 		super.initialize();
+		this._latestHUDComponent = null;
 	}
 
 	processDynamicInput(data, isNumber) {
@@ -362,7 +365,25 @@ class HUDMakerUltraProcessConfiguration extends UltraProcessConfiguration {
 	}
 
 	getProcessTitle() {
-		return "Ultra Base";
+		return "HUD Maker Ultra";
+	}
+
+	setLatestHUDComponent(hudComponent) {
+		this._latestHUDComponent = hudComponent;
+	}
+
+	clearLatestHUDComponent(hudComponent) {
+		this._latestHUDComponent = null;
+	}
+
+	getCustomFunctionParams() {
+		let params = super.getCustomFunctionParams();
+		if(!params) {
+			params = [[], []];
+		}
+		params[0].push("component");
+		params[1].push(this._latestHUDComponent);
+		return params;
 	}
 }
 
@@ -581,6 +602,7 @@ class Sprite_UltraHUDComponent extends Sprite {
 		this._multiCondition = null;
 		this._animations = null;
 		this._forcedVisibility = true;
+		this._propertyContributors = null;
 	}
 
 	setupPreliminaryProperties() {
@@ -606,7 +628,7 @@ class Sprite_UltraHUDComponent extends Sprite {
 
 	setupDisplayConditions() {
 		if(this._data.Conditions) {
-			this._multiCondition = new UltraDynamicMultiCondition(this._data.Conditions, this._hud.getConfig());
+			this._multiCondition = new UltraDynamicMultiCondition(this._data.Conditions, this._hud.getConfig(), this);
 			this._multiCondition.onChange.run(this.onDisplayConditionsChanged.bind(this));
 			this._multiCondition.start();
 		}
@@ -723,6 +745,48 @@ class Sprite_UltraHUDComponent extends Sprite {
 	isTextComponent() {
 		return this._data.Type === 0;
 	}
+
+	ensurePropertyContributorsExist() {
+		if(this._propertyContributors) {
+			return;
+		}
+
+		this._propertyContributors = {
+			scaleX: null,
+			scaleY: null,
+			alpha: null,
+		};
+	}
+
+	requestScaleXContributor(initialValue) {
+		this.ensurePropertyContributorsExist();
+		if(!this._propertyContributors.scaleX) {
+			this._propertyContributors.scaleX = new UltraMultiContributorProperty(function(value) {
+				this.scale.x = value;
+			}.bind(this));
+		}
+		return this._propertyContributors.scaleX.requestContributor(initialValue);
+	}
+
+	requestScaleYContributor(initialValue) {
+		this.ensurePropertyContributorsExist();
+		if(!this._propertyContributors.scaleY) {
+			this._propertyContributors.scaleY = new UltraMultiContributorProperty(function(value) {
+				this.scale.y = value;
+			}.bind(this));
+		}
+		return this._propertyContributors.scaleY.requestContributor(initialValue);
+	}
+
+	requestAlphaContributor(initialValue) {
+		this.ensurePropertyContributorsExist();
+		if(!this._propertyContributors.alpha) {
+			this._propertyContributors.alpha = new UltraMultiContributorProperty(function(value) {
+				this.alpha = value;
+			}.bind(this));
+		}
+		return this._propertyContributors.alpha.requestContributor(initialValue);
+	}
 }
 
 //=============================================================================
@@ -752,6 +816,13 @@ class UltraHUDComponent_Animation {
 		this._property = animationData.Property;
 		this._type = animationData.Type;
 		this._defaultReset = !!animationData.Reset;
+
+		switch(this._property) {
+			case 2: { this._contributor = this._component.requestScaleXContributor(this._start); break; }
+			case 3: { this._contributor = this._component.requestScaleYContributor(this._start); break; }
+			case 7: { this._contributor = this._component.requestAlphaContributor(this._start); break; }
+			default: { this._contributor = null; break; }
+		}
 	}
 
 	getReverseEasing(animationData) {
@@ -809,6 +880,17 @@ class UltraHUDComponent_Animation {
 		return this._isRunning;
 	}
 
+	isDone() {
+		return !this._isRunning && this._count > this._duration;
+	}
+
+	skip() {
+		if(this._type === 0) {
+			this._count = this._duration;
+			this.updateAnimation(true);
+		}
+	}
+
 	updateAnimation(updateCount) {
 		if(this._count <= this._duration) {
 			let ratio;
@@ -848,12 +930,12 @@ class UltraHUDComponent_Animation {
 		switch(this._property) {
 			case 0: { this._component.x = val; break; }
 			case 1: { this._component.y = val; break; }
-			case 2: { this._component.scale.x = val; break; }
-			case 3: { this._component.scale.y = val; break; }
+			case 2: { this._contributor(val); break; } // scale.x
+			case 3: { this._contributor(val); break; } // scale.y
 			case 4: { this._component.setComponentWidth(val); break; }
 			case 5: { this._component.setComponentHeight(val); break; }
 			case 6: { this._component.rotation = val; break; }
-			case 7: { this._component.alpha = val; break; }
+			case 7: { this._contributor(val); break; } // alpha
 			case 8: { this._component.setComponentOpenness(val * 255); break; }
 			case 9: { this._component.setRepeatOffsetX(val); break; }
 			case 10: { this._component.setRepeatOffsetY(val); break; }
@@ -1117,9 +1199,11 @@ class Sprite_UltraHUDComponent_Picture extends Sprite_UltraHUDComponent {
 	}
 
 	setupDynamicText() {
+		this._hud.getConfig().setLatestHUDComponent(this);
 		this._dynamicText = new UltraDynamicText({ Type: 7, Code: this._data.PictureData.Code }, this._hud.getConfig());
 		this._dynamicText.onChange.run(this.renderBitmap.bind(this));
 		this._dynamicText.start();
+		this._hud.getConfig().clearLatestHUDComponent();
 	}
 
 	renderBitmap(path) {
@@ -1174,9 +1258,11 @@ class Sprite_UltraHUDComponent_Repeat extends Sprite_UltraHUDComponent {
 	}
 
 	setupDynamicText() {
+		this._hud.getConfig().setLatestHUDComponent(this);
 		this._dynamicText = new UltraDynamicText({ Type: 7, Code: this._data.RepeatData.Code }, this._hud.getConfig());
 		this._dynamicText.onChange.run(this.renderBitmap.bind(this));
 		this._dynamicText.start();
+		this._hud.getConfig().clearLatestHUDComponent();
 	}
 
 	renderBitmap(path) {
@@ -1664,7 +1750,7 @@ class Sprite_UltraHUDComponent_Window extends Sprite_UltraHUDComponent {
 		const margin = this._hud.getConfig().processDynamicInput(typeof windowData.Margin === "number" ? windowData.Margin : 4, true);
 		const backgroundOpacity = this._hud.getConfig().processDynamicInput(typeof windowData.BackgroundOpacity === "number" ? windowData.BackgroundOpacity : 75, true);
 		this._window = new Window_Base(new Rectangle(0, 0, this._windowWidth, this._windowHeight));
-		this._window.windowSkin = ImageManager.loadSystem(windowData.WindowSkin);
+		this._window.windowskin = ImageManager.loadSystem(windowData.WindowSkin);
 		this._window.padding = padding;
 		this._window.margin = margin;
 		this._window.backOpacity = (backgroundOpacity / 100) * 255;
@@ -1799,9 +1885,11 @@ class Sprite_UltraHUDComponent_IconSet extends Sprite_UltraHUDComponent {
 	}
 
 	setupDynamicText() {
+		this._hud.getConfig().setLatestHUDComponent(this);
 		this._dynamicText = new UltraDynamicText({ Type: 7, Code: this._data.Code }, this._hud.getConfig());
 		this._dynamicText.onChange.run(this.renderBitmap.bind(this));
 		this._dynamicText.start();
+		this._hud.getConfig().clearLatestHUDComponent();
 	}
 
 	setupDynamicIconIndex(iconIndexData) {

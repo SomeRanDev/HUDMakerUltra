@@ -1,20 +1,30 @@
 /*:
  * @target MZ
  * @plugindesc Contains code required for HUD Maker Ultra. Does not affect the RPG Maker codebase.
- * @author SRDude
- * @url http://sumrndm.site
+ * @author SomeRanDev
+ * @url https://someran.dev/links
  * @orderBefore SRD_HUDMakerUltra
  *
  * @help
  * ============================================================================
  *                                  Ultra Base
- *                                 Version 1.2.0
- *                                    SRDude
+ *                                 Version 1.2.3
+ *                                  SomeRanDev
  * ============================================================================
  *
  * The base plugin required for HUD Maker Ultra.
  *
  * Does not provide any functionality beyond that.
+ *
+ * ============================================================================
+ *  Changelog
+ * ============================================================================
+ *
+ * 1.2.3
+ * Added SceneManager.currentSceneIsAnyOf.
+ *
+ * 1.2.2
+ * Added UltraMultiContributorProperty.
  *
  * ============================================================================
  *  End of Help File
@@ -23,18 +33,18 @@
  * Welcome to the bottom of the Help file. Thanks for reading!
  *
  * https://www.youtube.com/SumRndmDde
- * https://www.twitter.com/SumRndmDde
- * http://sumrndm.site
+ * https://bsky.app/profile/someran.dev
+ * http://someran.dev
  *
  * Until next time,
- *   ~ SRDude
+ *   ~ SomeRanDev
  */
 
 var SRD = SRD || {};
 SRD.UltraBase = SRD.UltraBase || {};
 
 var Imported = Imported || {};
-Imported.SRD_UltraBase = 0x010200; // 1.2.0
+Imported.SRD_UltraBase = 0x010203; // 1.2.3
 
 (function($) {
 
@@ -546,6 +556,44 @@ class UltraEasingCurve {
 }
 
 //=============================================================================
+// * UltraMultiContributorProperty
+// *
+// * Allows for multiple sources to contribute to a single property.
+// * For example: allowing multiple animations to modify scale (all scales are multiplied together).
+//=============================================================================
+class UltraMultiContributorProperty {
+	constructor() {
+		this.initialize(...arguments);
+	}
+
+	initialize(updatePropertyCallback) {
+		this._updatePropertyCallback = updatePropertyCallback;
+		this._contributorValues = [];
+	}
+
+	requestContributor(defaultValue) {
+		const index = this._contributorValues.length;
+		this._contributorValues.push(defaultValue);
+		return this.setContributorValue.bind(this, index);
+	}
+
+	setContributorValue(index, newValue) {
+		this._contributorValues[index] = newValue;
+		this.refresh();
+	}
+
+	refresh() {
+		if(this._contributorValues.length <= 0) {
+			return;
+		}
+		const finalValue = this._contributorValues.reduce(function(a, b) {
+			return a * b;
+		});
+		this._updatePropertyCallback(finalValue);
+	}
+}
+
+//=============================================================================
 // * UltraProcessConfiguration
 // *
 // * Used to configure the behavior of dynamic processes.
@@ -623,9 +671,9 @@ class UltraDynamicCondition {
 		this.initialize(...arguments);
 	}
 
-	initialize(conditionData, config) {
+	initialize(conditionData, config, context) {
 		this.createPublicFields();
-		this.createPrivateFields(conditionData, config);
+		this.createPrivateFields(conditionData, config, context);
 	}
 
 	createPublicFields() {
@@ -633,9 +681,10 @@ class UltraDynamicCondition {
 		this.state = null;
 	}
 
-	createPrivateFields(conditionData, config) {
+	createPrivateFields(conditionData, config, context) {
 		this._data = conditionData;
 		this._config = config;
+		this._context = context;
 		this._type = this._data.Type;
 		this._component = null;
 		this._updateComponent = null;
@@ -699,14 +748,14 @@ class UltraDynamicCondition {
 // * Works like UltraDynamicCondition, but takes an array of condition data.
 // * All conditions must be true for this to signal `true`. Otherwise, it will be `false`.
 //=============================================================================
-
 class UltraDynamicMultiCondition {
 	constructor() {
 		this.initialize(...arguments);
 	}
 
-	initialize(conditionDataArray, config) {
+	initialize(conditionDataArray, config, context) {
 		this.createPublicFields();
+		this.createPrivateFields(context);
 		this.setupConditions(conditionDataArray, config);
 	}
 
@@ -715,10 +764,14 @@ class UltraDynamicMultiCondition {
 		this.state = null;
 	}
 
+	createPrivateFields(context) {
+		this._context = context;
+	}
+
 	setupConditions(conditionDataArray, config) {
 		this.conditions = [];
 		for(let i = 0; i < conditionDataArray.length; i++) {
-			const conditionObj = new UltraDynamicCondition(conditionDataArray[i], config);
+			const conditionObj = new UltraDynamicCondition(conditionDataArray[i], config, this._context);
 			conditionObj.onChange.run(this.checkForChange.bind(this));
 			this.conditions.push(conditionObj);
 		}
@@ -2484,6 +2537,20 @@ class UltraTriggerManager {
 UltraTriggerManager.initialize();
 
 //=============================================================================
+// * SceneManager
+// *
+// * Added a function to check the current scene.
+//=============================================================================
+SceneManager.currentSceneIsAnyOf = function(...scenes) {
+	for(const scene of scenes) {
+		if(this._scene.constructor === scene) {
+			return true;
+		}
+	}
+	return false;
+};
+
+//=============================================================================
 // * Game_Switches
 // *
 // * Added an `UltraSignal` that triggers whenever a switch is changed.
@@ -2586,6 +2653,7 @@ exports.UltraSignal                                     = UltraSignal;
 exports.UltraUtils                                      = UltraUtils;
 exports.UltraEasingCurveTypes                           = UltraEasingCurveTypes;
 exports.UltraEasingCurve                                = UltraEasingCurve;
+exports.UltraMultiContributorProperty                   = UltraMultiContributorProperty;
 exports.UltraProcessConfiguration                       = UltraProcessConfiguration;
 exports.UltraDynamicCondition                           = UltraDynamicCondition;
 exports.UltraDynamicMultiCondition                      = UltraDynamicMultiCondition;
