@@ -1,3 +1,3 @@
 # HUDMakerUltra
 
-http://sumrndm.site/hud-maker-ultra
+https://someran.dev/rpgmaker/plugins/mz/SRD_HUDMakerUltra.js/
